@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fusion Simulator — Hold a star in your hand.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep: #000000;
+  --bg-near: #0A0A0F;
+  --plasma-cyan: #7DD3FC;
+  --plasma-cyan-bright: #BAE6FD;
+  --plasma-blue: #38BDF8;
+  --warm-edge: #f97316;
+  --text-primary: rgba(255,255,255,0.94);
+  --text-muted: rgba(255,255,255,0.55);
+  --text-faint: rgba(255,255,255,0.32);
+  --border-subtle: rgba(255,255,255,0.12);
+  --border-glow: rgba(125, 211, 252, 0.45);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  cursor: default;
+}
+
+/* === Atmospheric background === */
+.atmosphere {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 70% 60% at 62% 45%,
+      rgba(56, 189, 248, 0.20) 0%,
+      rgba(56, 189, 248, 0.07) 28%,
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 100% 90% at 50% 55%,
+      transparent 50%,
+      rgba(249, 115, 22, 0.05) 80%,
+      rgba(249, 115, 22, 0.09) 100%
+    );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Subtle vignette */
+.vignette {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.5) 100%);
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* === Three.js canvas === */
+#scene-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* === Hand layer === */
+.hand-layer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: min(58%, 900px);
+  height: 78%;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hand-img {
+  position: absolute;
+  bottom: 0;
+  left: -2%;
+  width: 105%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom left;
+  filter:
+    grayscale(0.75)
+    brightness(0.42)
+    contrast(1.25)
+    sepia(0.2)
+    hue-rotate(170deg)
+    saturate(0.55);
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  -webkit-mask-image:
+    linear-gradient(to right, black 55%, transparent 95%),
+    linear-gradient(to top, black 65%, transparent 100%);
+  -webkit-mask-composite: source-in;
+          mask-image:
+    linear-gradient(to right, black 55%, transparent 95%),
+    linear-gradient(to top, black 65%, transparent 100%);
+          mask-composite: intersect;
+}
+.hand-img.loaded { opacity: 0.85; }
+
+/* Placeholder when no image dropped */
+.hand-placeholder {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  background:
+    linear-gradient(
+      to top right,
+      rgba(125, 211, 252, 0.06) 0%,
+      rgba(125, 211, 252, 0.02) 35%,
+      transparent 65%
+    );
+  -webkit-mask-image: linear-gradient(to top right, black 0%, transparent 70%);
+          mask-image: linear-gradient(to top right, black 0%, transparent 70%);
+  transition: opacity 0.6s ease;
+}
+
+/* === Nav === */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 26px 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Instrument Serif', serif;
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  color: var(--text-primary);
+}
+.nav-brand-mark {
+  width: 22px;
+  height: 22px;
+  color: var(--text-muted);
+}
+.nav-links {
+  display: flex;
+  gap: 38px;
+  font-family: 'Geist', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+.nav-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.25s ease;
+}
+.nav-links a:hover { color: var(--text-primary); }
+
+/* === Hero === */
+.hero {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 4;
+  pointer-events: none;
+  padding: 0 24px;
+}
+
+.headline {
+  font-family: 'Instrument Serif', serif;
+  font-weight: 400;
+  font-size: clamp(56px, 9.2vw, 138px);
+  line-height: 0.98;
+  letter-spacing: -0.022em;
+  text-align: center;
+  color: var(--text-primary);
+  max-width: 13ch;
+  position: relative;
+  z-index: 4;
+  text-shadow: 0 2px 60px rgba(0,0,0,0.7);
+}
+.headline em {
+  font-style: italic;
+  font-weight: 400;
+  position: relative;
+}
+
+.subhead {
+  margin-top: 30px;
+  font-family: 'Geist', sans-serif;
+  font-weight: 300;
+  font-size: 15px;
+  line-height: 1.55;
+  text-align: center;
+  color: var(--text-muted);
+  max-width: 480px;
+  letter-spacing: 0.005em;
+}
+
+.cta-wrap {
+  margin-top: 38px;
+  pointer-events: auto;
+}
+
+.cta-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 44px;
+  font-family: 'Geist', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: all 0.45s cubic-bezier(.2,.8,.2,1);
+  overflow: hidden;
+}
+.cta-button::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 999px;
+  background: conic-gradient(
+    from 90deg at 50% 50%,
+    transparent 0deg,
+    rgba(125, 211, 252, 0.6) 90deg,
+    transparent 180deg,
+    rgba(125, 211, 252, 0.3) 270deg,
+    transparent 360deg
+  );
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  padding: 1px;
+  animation: cta-rotate 6s linear infinite;
+}
+.cta-button:hover {
+  background: rgba(125, 211, 252, 0.05);
+  border-color: var(--border-glow);
+  box-shadow: 0 0 50px rgba(125, 211, 252, 0.22);
+  letter-spacing: 0.08em;
+}
+.cta-button:hover::before { opacity: 1; }
+
+@keyframes cta-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* === Footer info === */
+.version-label {
+  position: fixed;
+  bottom: 26px;
+  left: 48px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--text-faint);
+  z-index: 5;
+}
+.physics-readout {
+  position: fixed;
+  bottom: 26px;
+  right: 48px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  z-index: 5;
+  text-align: right;
+}
+
+/* === Launching state === */
+.flash-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 62% 45%, rgba(186,230,253,0) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 50;
+  transition: background 1.6s cubic-bezier(.2,.8,.2,1);
+}
+body.launching .hero,
+body.launching .nav,
+body.launching .version-label,
+body.launching .physics-readout {
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+body.launching .hand-img {
+  opacity: 0.4;
+  transition: opacity 1.2s ease;
+}
+body.launching .flash-overlay {
+  background: radial-gradient(circle at 62% 45%, rgba(186,230,253,0.95) 0%, rgba(56,189,248,0.4) 30%, rgba(0,0,0,0.95) 75%);
+}
+
+/* === Fade-in stagger === */
+.fade-in {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: fade-in-anim 1.4s cubic-bezier(.2,.8,.2,1) forwards;
+}
+.fade-in-1 { animation-delay: 0.15s; }
+.fade-in-2 { animation-delay: 0.45s; }
+.fade-in-3 { animation-delay: 0.75s; }
+.fade-in-4 { animation-delay: 1.0s; }
+.fade-in-5 { animation-delay: 1.25s; }
+.fade-in-6 { animation-delay: 1.5s; }
+@keyframes fade-in-anim {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* === Responsive === */
+@media (max-width: 720px) {
+  .nav { padding: 20px 24px; }
+  .nav-links { gap: 22px; font-size: 12px; }
+  .nav-links a:nth-child(3) { display: none; }
+  .hand-layer { width: 95%; height: 60%; }
+  .version-label { left: 24px; bottom: 18px; font-size: 9px; }
+  .physics-readout { right: 24px; bottom: 18px; font-size: 9px; }
+  .subhead { font-size: 14px; padding: 0 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="atmosphere"></div>
+
+<canvas id="scene-canvas"></canvas>
+
+<!-- Hand layer (Adam's hand reaching, bottom-left) -->
+<div class="hand-layer" id="hand-layer">
+  <img class="hand-img" id="hand-img" alt="" />
+  <div class="hand-placeholder"></div>
+</div>
+
+<div class="vignette"></div>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-brand fade-in fade-in-1">
+    <svg class="nav-brand-mark" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="12" cy="12" rx="10" ry="3.5" stroke="currentColor" stroke-width="0.7" opacity="0.7"/>
+      <ellipse cx="12" cy="12" rx="10" ry="3.5" stroke="currentColor" stroke-width="0.7" opacity="0.7" transform="rotate(60 12 12)"/>
+      <ellipse cx="12" cy="12" rx="10" ry="3.5" stroke="currentColor" stroke-width="0.7" opacity="0.7" transform="rotate(120 12 12)"/>
+      <circle cx="12" cy="12" r="1.6" fill="#7DD3FC"/>
+    </svg>
+    <span>Fusion Simulator</span>
+  </div>
+  <div class="nav-links fade-in fade-in-1">
+    <a href="#">About</a>
+    <a href="#">Presets</a>
+    <a href="#">GitHub</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <h1 class="headline fade-in fade-in-2">Hold <em>a&nbsp;star</em><br>in your hand.</h1>
+  <p class="subhead fade-in fade-in-3">A real-time simulator of every fusion reactor humanity is building&nbsp;— from JET to ARC. Tune the plasma. Find ignition.</p>
+  <div class="cta-wrap fade-in fade-in-4">
+    <button class="cta-button" id="start-btn">Start</button>
+  </div>
+</div>
+
+<div class="version-label fade-in fade-in-5">v0.4 · PRE-RELEASE</div>
+<div class="physics-readout fade-in fade-in-5">1.40 × 10⁸ K · 12.7 MA</div>
+
+<div class="flash-overlay"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// =========================================================
+// FUSION SIMULATOR — Landing
+// Three.js scene: pulsing nucleus + electron orbit + particles
+// =========================================================
+
+let scene, camera, renderer;
+let atomGroup;
+let nucleus, innerHalo, midHalo, outerHalo;
+let electron, electronOrbit;
+let particles;
+let starField;
+let starBasePositions;
+let starPhases;
+let viewWidthWorld = 12;
+let viewHeightWorld = 8;
+
+let mouseTarget = { x: 0, y: 0 };
+let mouseCurrent = { x: 0, y: 0 };
+let pulsePhase = 0;
+let pulseSpeed = 1.0;
+let pulseSpeedTarget = 1.0;
+
+let isLaunching = false;
+let launchStart = 0;
+
+const ORBIT_A = 0.92;
+const ORBIT_B = 0.34;
+const ORBIT_TILT_X = Math.PI * 0.20;
+const ORBIT_TILT_Z = Math.PI * 0.12;
+const orbitEuler = new THREE.Euler(ORBIT_TILT_X, 0, ORBIT_TILT_Z);
+
+const clock = new THREE.Clock();
+const canvas = document.getElementById('scene-canvas');
+
+function createGlowTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+  g.addColorStop(0.00, 'rgba(255,255,255,1)');
+  g.addColorStop(0.12, 'rgba(255,255,255,0.65)');
+  g.addColorStop(0.32, 'rgba(255,255,255,0.18)');
+  g.addColorStop(0.62, 'rgba(255,255,255,0.04)');
+  g.addColorStop(1.00, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function positionAtom() {
+  // Place atom in upper-mid-right area — visually near where Adam's
+  // fingertip would reach in the Michelangelo composition.
+  const aspect = window.innerWidth / window.innerHeight;
+  const fovRad = camera.fov * Math.PI / 180;
+  const visH = 2 * Math.tan(fovRad / 2) * camera.position.z;
+  const visW = visH * aspect;
+  viewHeightWorld = visH;
+  viewWidthWorld = visW;
+  // Slight right of center, slight above center
+  atomGroup.position.set(visW * 0.10, visH * 0.04, 0);
+}
+
+function init() {
+  scene = new THREE.Scene();
+
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 0, 6);
+
+  renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x000000, 0);
+
+  // Atom group
+  atomGroup = new THREE.Group();
+  scene.add(atomGroup);
+  positionAtom();
+
+  const glowTex = createGlowTexture();
+
+  // Outer halo (large soft aura)
+  outerHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex,
+    color: 0x7DD3FC,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    opacity: 0.50,
+    depthWrite: false,
+  }));
+  outerHalo.scale.set(6.5, 6.5, 1);
+  atomGroup.add(outerHalo);
+
+  // Mid halo
+  midHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex,
+    color: 0xBAE6FD,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    opacity: 0.60,
+    depthWrite: false,
+  }));
+  midHalo.scale.set(2.5, 2.5, 1);
+  atomGroup.add(midHalo);
+
+  // Inner glow (intense white core)
+  innerHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex,
+    color: 0xffffff,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    opacity: 0.95,
+    depthWrite: false,
+  }));
+  innerHalo.scale.set(0.95, 0.95, 1);
+  atomGroup.add(innerHalo);
+
+  // Nucleus
+  nucleus = new THREE.Mesh(
+    new THREE.SphereGeometry(0.075, 32, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffffff })
+  );
+  atomGroup.add(nucleus);
+
+  // Electron orbit line
+  const orbitPts = [];
+  const segs = 160;
+  for (let i = 0; i <= segs; i++) {
+    const t = (i / segs) * Math.PI * 2;
+    orbitPts.push(new THREE.Vector3(
+      Math.cos(t) * ORBIT_A,
+      Math.sin(t) * ORBIT_B,
+      0
+    ));
+  }
+  const orbitGeom = new THREE.BufferGeometry().setFromPoints(orbitPts);
+  electronOrbit = new THREE.Line(
+    orbitGeom,
+    new THREE.LineBasicMaterial({
+      color: 0x7DD3FC,
+      transparent: true,
+      opacity: 0.16
+    })
+  );
+  electronOrbit.rotation.x = ORBIT_TILT_X;
+  electronOrbit.rotation.z = ORBIT_TILT_Z;
+  atomGroup.add(electronOrbit);
+
+  // Electron
+  electron = new THREE.Group();
+  const ec = new THREE.Mesh(
+    new THREE.SphereGeometry(0.028, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xBAE6FD })
+  );
+  electron.add(ec);
+  const eg = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex,
+    color: 0x7DD3FC,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    opacity: 0.55,
+    depthWrite: false,
+  }));
+  eg.scale.set(0.32, 0.32, 1);
+  electron.add(eg);
+  atomGroup.add(electron);
+
+  // Particle field (sparse drifting)
+  const N = 200;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    pos[i*3]   = (Math.random() - 0.5) * 22;
+    pos[i*3+1] = (Math.random() - 0.5) * 14;
+    pos[i*3+2] = (Math.random() - 0.5) * 10 - 2;
+  }
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pm = new THREE.PointsMaterial({
+    color: 0x7DD3FC,
+    size: 0.028,
+    transparent: true,
+    opacity: 0.45,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+    depthWrite: false,
+    map: glowTex,
+  });
+  particles = new THREE.Points(pg, pm);
+  scene.add(particles);
+
+  // Background star field (tiny stars with subtle parallax + hover response)
+  const S = 1400;
+  const starPos = new Float32Array(S * 3);
+  const starBase = new Float32Array(S * 3);
+  const phases = new Float32Array(S);
+  for (let i = 0; i < S; i++) {
+    const x = (Math.random() - 0.5) * 30;
+    const y = (Math.random() - 0.5) * 20;
+    const z = -6 - Math.random() * 12;
+    starPos[i*3] = x;
+    starPos[i*3+1] = y;
+    starPos[i*3+2] = z;
+    starBase[i*3] = x;
+    starBase[i*3+1] = y;
+    starBase[i*3+2] = z;
+    phases[i] = Math.random() * Math.PI * 2;
+  }
+
+  const starGeom = new THREE.BufferGeometry();
+  starGeom.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  const starMat = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.018,
+    transparent: true,
+    opacity: 0.86,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+    depthWrite: false,
+    map: glowTex,
+  });
+  starField = new THREE.Points(starGeom, starMat);
+  scene.add(starField);
+  starBasePositions = starBase;
+  starPhases = phases;
+
+  window.addEventListener('resize', onResize);
+  window.addEventListener('mousemove', onMouseMove);
+
+  animate();
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  positionAtom();
+}
+
+function onMouseMove(e) {
+  mouseTarget.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseTarget.y = -((e.clientY / window.innerHeight) * 2 - 1);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  // Mouse damping
+  mouseCurrent.x += (mouseTarget.x - mouseCurrent.x) * 0.06;
+  mouseCurrent.y += (mouseTarget.y - mouseCurrent.y) * 0.06;
+
+  // Pulse speed easing toward target
+  pulseSpeed += (pulseSpeedTarget - pulseSpeed) * 0.05;
+
+  // Tilt atom group toward cursor (~5deg max)
+  const tiltMax = 0.09;
+  const baseRotY = mouseCurrent.x * tiltMax;
+  const baseRotX = -mouseCurrent.y * tiltMax * 0.7;
+
+  if (!isLaunching) {
+    atomGroup.rotation.y = baseRotY;
+    atomGroup.rotation.x = baseRotX;
+  } else {
+    // gentle continued rotation during launch
+    atomGroup.rotation.y += dt * 0.4;
+  }
+
+  // Pulse nucleus + inner halo
+  pulsePhase += dt * pulseSpeed;
+  const pulse = 1 + Math.sin(pulsePhase * 1.6) * 0.10;
+  nucleus.scale.setScalar(pulse);
+  innerHalo.material.opacity = 0.85 + Math.sin(pulsePhase * 1.6) * 0.10;
+  midHalo.material.opacity = 0.55 + Math.sin(pulsePhase * 1.6 + 0.4) * 0.08;
+
+  // Electron orbit
+  const orbitT = t * 1.4;
+  const ev = new THREE.Vector3(
+    Math.cos(orbitT) * ORBIT_A,
+    Math.sin(orbitT) * ORBIT_B,
+    0
+  ).applyEuler(orbitEuler);
+  electron.position.copy(ev);
+
+  // Drift particles
+  if (particles) {
+    const arr = particles.geometry.attributes.position.array;
+    for (let i = 0; i < arr.length; i += 3) {
+      arr[i+1] += dt * 0.025;
+      if (arr[i+1] > 8) arr[i+1] = -8;
+    }
+    particles.geometry.attributes.position.needsUpdate = true;
+    particles.rotation.y = t * 0.004;
+  }
+
+  // Tiny stars: twinkle + mouse parallax + soft hover brightening
+  if (starField && starBasePositions && starPhases) {
+    const arr = starField.geometry.attributes.position.array;
+    const cursorX = mouseCurrent.x * viewWidthWorld * 0.45;
+    const cursorY = mouseCurrent.y * viewHeightWorld * 0.45;
+    for (let i = 0; i < arr.length; i += 3) {
+      const idx = i / 3;
+      const bx = starBasePositions[i];
+      const by = starBasePositions[i + 1];
+      const bz = starBasePositions[i + 2];
+
+      const depth = Math.max(0.15, (Math.abs(bz) - 4) * 0.06);
+      const parallaxX = mouseCurrent.x * (0.05 + depth * 0.08);
+      const parallaxY = mouseCurrent.y * (0.03 + depth * 0.06);
+
+      const dx = bx - cursorX;
+      const dy = by - cursorY;
+      const distSq = dx * dx + dy * dy;
+      const hoverInfluence = Math.exp(-distSq * 0.9);
+      const wobble = Math.sin(t * 0.9 + starPhases[idx]) * 0.015;
+
+      arr[i] = bx + parallaxX + (dx * 0.018 * hoverInfluence);
+      arr[i + 1] = by + parallaxY + wobble + (dy * 0.014 * hoverInfluence);
+      arr[i + 2] = bz + hoverInfluence * 0.25;
+    }
+    starField.geometry.attributes.position.needsUpdate = true;
+    starField.material.opacity = 0.6 + Math.sin(t * 1.3) * 0.08 + Math.abs(mouseCurrent.x) * 0.06;
+  }
+
+  // Launching transition: scale atom dramatically
+  if (isLaunching) {
+    const elapsed = (performance.now() - launchStart) / 1000;
+    const k = Math.min(elapsed / 1.8, 1);
+    const ease = 1 - Math.pow(1 - k, 2.5);
+    const s = 1 + ease * 35;
+    atomGroup.scale.setScalar(s);
+    pulseSpeedTarget = 8;
+    // Slight camera dolly forward for "zoom into" feel
+    camera.position.z = 6 - ease * 1.4;
+  }
+
+  renderer.render(scene, camera);
+}
+
+// === CTA hover speeds the pulse subtly ===
+const startBtn = document.getElementById('start-btn');
+startBtn.addEventListener('mouseenter', () => { pulseSpeedTarget = 2.6; });
+startBtn.addEventListener('mouseleave', () => { if (!isLaunching) pulseSpeedTarget = 1.0; });
+
+// === Click → launch transition ===
+startBtn.addEventListener('click', () => {
+  if (isLaunching) return;
+  isLaunching = true;
+  launchStart = performance.now();
+  document.body.classList.add('launching');
+
+  setTimeout(() => {
+    const o = document.createElement('div');
+    o.style.cssText = `
+      position: fixed; inset: 0; z-index: 100;
+      background: #050608;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Geist Mono', monospace;
+      font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      opacity: 0; transition: opacity 0.7s ease;
+    `;
+    o.innerHTML = '<span>→ launching simulator</span>';
+    document.body.appendChild(o);
+    requestAnimationFrame(() => { o.style.opacity = '1'; });
+  }, 1900);
+
+  setTimeout(() => {
+    window.location.href = '/simulator';
+  }, 2550);
+});
+
+// Init
+init();
+</script>
+</body>
+</html>

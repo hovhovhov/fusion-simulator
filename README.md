@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fusion Mission Control Simulator
 
-## Getting Started
+Interactive fusion power plant simulator with:
 
-First, run the development server:
+- Real-time tokamak 3D scene (R3F + bloom post-processing)
+- Extended reactor modeling (`Q_sci`, `Q_eng`, net electric output)
+- Fuel switching (`D-T`, `D-D`, `D-He3`, `p-B11`)
+- Lawson criterion panel (`nTtau` vs ignition threshold)
+- Clickable Sankey flow graph for energy recirculation and losses
+- Shareable scenario state through URL query params
+
+## Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tech Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Next.js 16 (App Router, TypeScript)
+- Tailwind v4 + shadcn/ui
+- Zustand for simulation state
+- Three.js via `@react-three/fiber` and `@react-three/drei`
+- D3 / d3-sankey for flow and chart rendering
+- Framer Motion for HUD transitions
 
-## Learn More
+## Core Structure
 
-To learn more about Next.js, take a look at the following resources:
+- `app/page.tsx`: mission-control composition and URL hydration/sharing
+- `lib/physics/*`: fuel models, presets, Lawson helpers, and core simulation math
+- `lib/store.ts`: Zustand store, state derivations, query serialization
+- `components/hud/*`: controls, readouts, Sankey, Lawson plot
+- `components/reactor/*`: tokamak scene primitives and interactive hotspots
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Build & Verify
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run lint
+npm run build
+```
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Deploy directly to Vercel:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npx vercel
+```
