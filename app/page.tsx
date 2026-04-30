@@ -18,8 +18,6 @@ import {
   SANKEY_NODE_TOOLTIPS,
 } from "@/lib/content";
 import type { PresetId, SimulatorInputs } from "@/lib/presets";
-import { FUEL_REACTION_INFO } from "@/lib/fuel-reaction";
-import type { FuelKey } from "@/lib/physics/fuels";
 import { labelForControl, labelForNode } from "@/lib/ui-labels";
 import { useSimulation, useSimulatorStore } from "@/store";
 import { useTweenNumber } from "@/lib/useTweenNumber";
@@ -35,7 +33,6 @@ type PopoverSource =
   | { kind: "node"; id: string }
   | { kind: "flow"; id: string; sourceId: string; targetId: string; valueMW: number }
   | { kind: "control"; id: string }
-  | { kind: "fuel_reaction"; id: "overview" | "deep_dive"; fuel: FuelKey }
   | { kind: "context"; id: "homes" | "data_centers" | "grid_share" }
   | { kind: "core_metric"; id: "qSci" | "qEng" | "fusion" | "gross" | "recirc" | "net" | "lawson" | "fuel_mode" };
 
@@ -186,7 +183,7 @@ export function SimulatorPage() {
         </div>
       </header>
 
-      <main className="relative grid h-[calc(100vh-112px)] grid-cols-[280px_1fr_340px] gap-2 p-2">
+      <main className="relative grid h-[calc(100vh-112px)] grid-cols-[280px_1fr_476px] gap-2 p-2">
         <ControlsPanel
           onShare={handleShare}
           onReset={handleReset}
@@ -222,10 +219,6 @@ export function SimulatorPage() {
         </section>
 
         <ReadoutsPanel
-          onOpenFuelReactionPopover={(id, fuel, anchorRect, placement) => {
-            setPopoverSource({ kind: "fuel_reaction", id, fuel });
-            setPopoverAnchor({ rect: anchorRect, placement });
-          }}
           onOpenContextPopover={(id, anchorRect, placement) => {
             setPopoverSource({ kind: "context", id });
             setPopoverAnchor({ rect: anchorRect, placement });
@@ -559,32 +552,6 @@ function buildPopoverData(
       title: control.title,
       description: control.long.slice(0, 2),
       relatedControls: [],
-    };
-  }
-
-  if (source.kind === "fuel_reaction") {
-    const info = FUEL_REACTION_INFO[source.fuel];
-    return {
-      breadcrumb:
-        source.id === "overview" ? "FUEL REACTION · OVERVIEW" : "FUEL REACTION · DEEP DIVE",
-      title:
-        source.id === "overview"
-          ? "What fusion does at atomic scale"
-          : `${info.title} - practical tradeoffs`,
-      currentValue: source.id === "overview" ? info.facts[0]?.value : undefined,
-      description:
-        source.id === "overview"
-          ? [
-              "Two light atomic nuclei fuse into a heavier one, converting a small fraction of mass into energy (E = mc2).",
-              "Different fuels produce very different mixes of charged particles and neutrons, which drives engineering complexity.",
-              "Temperature thresholds, fuel sourcing, and neutron loading decide whether a pathway is practical for power plants.",
-            ]
-          : info.deepDive,
-      relatedControls: [
-        { id: "fuel", label: labelForControl("fuel") },
-        { id: "temperatureKeV", label: labelForControl("temperatureKeV") },
-        { id: "qSci", label: labelForControl("qSci") },
-      ],
     };
   }
 

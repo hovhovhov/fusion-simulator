@@ -3,24 +3,16 @@
 import { Database, Home, Info, PlugZap } from "lucide-react";
 import { type ReactNode } from "react";
 
-import { FuelReactionCard } from "@/components/ReadoutsPanel/FuelReactionCard";
+import { FuelReactionPanel } from "@/components/ReadoutsPanel/FuelReactionPanel";
 import { GlossaryTerm } from "@/components/learn/GlossaryTerm";
 import { GLOSSARY } from "@/lib/learn";
-import type { FuelKey } from "@/lib/physics/fuels";
 import { useSimulation, useSimulatorStore } from "@/store";
 import { useTweenNumber } from "@/lib/useTweenNumber";
 
 export function ReadoutsPanel({
   onOpenContextPopover,
   onOpenCoreMetricPopover,
-  onOpenFuelReactionPopover,
 }: {
-  onOpenFuelReactionPopover: (
-    kind: "overview" | "deep_dive",
-    fuel: FuelKey,
-    anchorRect: DOMRect,
-    placement: "left" | "right" | "top",
-  ) => void;
   onOpenContextPopover: (
     id: "homes" | "data_centers" | "grid_share",
     anchorRect: DOMRect,
@@ -51,7 +43,7 @@ export function ReadoutsPanel({
     lawsonValue >= 1 ? "text-[#5be584]" : lawsonValue >= 0.5 ? "text-[#ffb547]" : "text-[#ef5757]";
 
   return (
-    <aside className="panel column-scroll flex h-full flex-col overflow-y-auto p-3">
+    <aside className="panel column-scroll flex h-full flex-col overflow-y-auto p-2">
       <section className="mb-3 border border-white/6 p-2">
         <p className="section-label mb-2">Core Metrics</p>
         <QComparisonBlock
@@ -118,13 +110,7 @@ export function ReadoutsPanel({
         </ul>
       </section>
 
-      <FuelReactionCard
-        fuel={inputs.fuel}
-        onOpenInfo={(anchorRect, placement) => onOpenFuelReactionPopover("overview", inputs.fuel, anchorRect, placement)}
-        onOpenDeepDive={(anchorRect, placement) =>
-          onOpenFuelReactionPopover("deep_dive", inputs.fuel, anchorRect, placement)
-        }
-      />
+      <FuelReactionPanel />
     </aside>
   );
 }

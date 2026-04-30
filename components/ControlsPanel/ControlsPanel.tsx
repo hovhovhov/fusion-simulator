@@ -1,14 +1,15 @@
 "use client";
 
 import { ChevronDown, CircleHelp, Info } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { GlossaryTerm } from "@/components/learn/GlossaryTerm";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CONTROL_EXPLANATIONS, PRESET_STORIES } from "@/lib/content";
 import { GLOSSARY } from "@/lib/learn";
-import type { FuelKey } from "@/lib/physics/fuels";
+import { FUEL_PROFILES, type FuelKey } from "@/lib/physics/fuels";
 import { fuelDescription } from "@/lib/presets";
 import { PRESETS, useSimulatorStore } from "@/store";
 
@@ -33,6 +34,24 @@ export function ControlsPanel({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const fuelMeta = fuelDescription(inputs.fuel);
   const hasElectricalConversion = inputs.hasElectricalConversion;
+  const qEngBreakEvenQSci = useMemo(() => {
+    if (!hasElectricalConversion || inputs.heatingPowerMW <= 0 || inputs.etaHeating <= 0) {
+      return undefined;
+    }
+
+    const neutronFraction = FUEL_PROFILES[inputs.fuel].neutronFraction;
+    const conversionPerFusionMW =
+      neutronFraction * inputs.blanketMult * inputs.etaNeutron +
+      (1 - neutronFraction) * inputs.etaCharged +
+      neutronFraction * inputs.blanketMult * inputs.etaHeatingThrough;
+    const recoveredHeatingLossMW =
+      inputs.heatingPowerMW * (1 - inputs.etaHeating) * inputs.etaHeatingThrough;
+    const targetGrossMW = inputs.heatingPowerMW + inputs.houseLoadMW;
+    const denominator = inputs.heatingPowerMW * inputs.etaHeating * conversionPerFusionMW;
+
+    if (denominator <= 0) return undefined;
+    return (targetGrossMW - recoveredHeatingLossMW) / denominator;
+  }, [hasElectricalConversion, inputs]);
   const fuelGlossaryKey =
     inputs.fuel === "dt"
       ? "dt"
@@ -210,6 +229,7 @@ export function ControlsPanel({
             tooltip="Ratio between fusion power and absorbed heating power in plasma."
             onChange={(value) => setInput("qSci", value)}
             baseline={10}
+            snapPoint={qEngBreakEvenQSci}
             controlId="qSci"
             onOpenControl={onOpenControl}
             highlighted={highlightedControlId === "qSci"}
@@ -406,6 +426,7 @@ function ControlSlider({
   tooltip,
   onChange,
   baseline,
+  snapPoint,
   controlId,
   onOpenControl,
   highlighted = false,
@@ -421,13 +442,40 @@ function ControlSlider({
   tooltip: string;
   onChange: (value: number) => void;
   baseline: number;
+  snapPoint?: number;
   controlId: string;
   onOpenControl: (controlId: string, anchorRect: DOMRect, placement: "left" | "right" | "top") => void;
   highlighted?: boolean;
   disabled?: boolean;
   disabledReason?: string;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
   const baselinePct = ((baseline - min) / (max - min)) * 100;
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+
+    const stopDragging = () => setIsDragging(false);
+    window.addEventListener("pointerup", stopDragging);
+    window.addEventListener("pointercancel", stopDragging);
+    window.addEventListener("blur", stopDragging);
+
+    return () => {
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointerup", stopDragging);
+      window.removeEventListener("pointercancel", stopDragging);
+      window.removeEventListener("blur", stopDragging);
+    };
+  }, [isDragging]);
+
+  function handleChange(nextValue: number | readonly number[]) {
+    if (disabled) return;
+    const rawValue = Array.isArray(nextValue) ? nextValue[0] : nextValue;
+    onChange(applySnapResistance(rawValue, value, min, max, step, snapPoint));
+  }
+
   return (
     <div
       className="space-y-1 border border-transparent p-1 transition-colors"
@@ -467,20 +515,59 @@ function ControlSlider({
         </span>
       </div>
       <div className="relative">
-        <input
-          type="range"
+        <Slider
           value={value}
           min={min}
           max={max}
           step={step}
-          onChange={(event) => {
-            if (!disabled) onChange(Number(event.target.value));
-          }}
           disabled={disabled}
-          className="slider-thin h-4 w-full appearance-none bg-transparent disabled:opacity-40"
+          onValueChange={(nextValue) => handleChange(nextValue)}
+          onValueCommitted={() => setIsDragging(false)}
+          onPointerDown={() => {
+            if (!disabled) setIsDragging(true);
+          }}
+          className="h-6 w-full disabled:opacity-40"
         />
-        <span className="pointer-events-none absolute top-[8px] h-[2px] w-[1px] bg-white/45" style={{ left: `${baselinePct}%` }} />
+        <span className="pointer-events-none absolute top-1/2 h-3 w-px -translate-y-1/2 bg-white/45" style={{ left: `${baselinePct}%` }} />
       </div>
     </div>
   );
+}
+
+function applySnapResistance(
+  rawValue: number,
+  previousValue: number,
+  min: number,
+  max: number,
+  step: number,
+  snapPoint?: number,
+) {
+  const clamped = clamp(rawValue, min, max);
+  if (snapPoint === undefined || snapPoint <= min || snapPoint >= max) {
+    return roundToStep(clamped, min, step);
+  }
+
+  const resistanceRadius = Math.max(step * 5, (max - min) * 0.015);
+  const distance = Math.abs(clamped - snapPoint);
+  if (distance > resistanceRadius) {
+    return roundToStep(clamped, min, step);
+  }
+
+  if (distance <= step * 0.6) {
+    return roundToStep(snapPoint, min, step);
+  }
+
+  const wasOutsideSnap = Math.abs(previousValue - snapPoint) > step * 0.6;
+  const slowedValue = snapPoint + (clamped - snapPoint) * (wasOutsideSnap ? 0.45 : 0.7);
+  return roundToStep(clamp(slowedValue, min, max), min, step);
+}
+
+function roundToStep(value: number, min: number, step: number) {
+  const precision = Math.max(0, `${step}`.split(".")[1]?.length ?? 0);
+  const stepped = min + Math.round((value - min) / step) * step;
+  return Number(stepped.toFixed(precision));
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
