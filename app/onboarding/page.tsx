@@ -4,7 +4,7 @@ export default function OnboardingPage() {
   return (
     <main className="relative h-screen w-screen bg-black">
       <iframe
-        src="/onboarding/source"
+        src="/onboarding.html"
         title="Fusion simulator onboarding"
         className="h-full w-full border-0"
       />
