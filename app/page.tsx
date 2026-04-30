@@ -201,7 +201,7 @@ export function SimulatorPage() {
           }}
         />
 
-        <section className="relative grid h-full grid-rows-[50%_50%] gap-0 overflow-hidden">
+        <section className="relative grid h-full grid-rows-[36%_64%] gap-0 overflow-hidden">
           <TokamakHero />
           <SankeyFlowPanel
             onOpenNodeDetails={(nodeId, anchorRect, placement) => {

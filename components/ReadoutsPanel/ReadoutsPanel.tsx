@@ -39,7 +39,6 @@ export function ReadoutsPanel({
   const hasElectricalConversion = inputs.hasElectricalConversion;
 
   const qSci = useTweenNumber(inputs.qSci, 250);
-  const qEng = useTweenNumber(simulation.qEng ?? 0, 250);
   const fusion = useTweenNumber(simulation.power.fusionMW, 250);
   const gross = useTweenNumber(simulation.power.grossElectricMW, 250);
   const recirc = useTweenNumber(simulation.power.recirculationMW, 250);
@@ -55,9 +54,13 @@ export function ReadoutsPanel({
     <aside className="panel column-scroll flex h-full flex-col overflow-y-auto p-3">
       <section className="mb-3 border border-white/6 p-2">
         <p className="section-label mb-2">Core Metrics</p>
+        <QComparisonBlock
+          qSci={qSci}
+          qEng={simulation.qEng}
+          hasElectricalConversion={hasElectricalConversion}
+          onOpenMetric={onOpenCoreMetricPopover}
+        />
         <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1.5 text-[12px]">
-          <Metric label={<GlossaryTerm term="Q_sci" definition={GLOSSARY.q_sci.definition} />} value={qSci} metricKey="qSci" touchedMetric={touchedMetric} touchNonce={touchNonce} onOpenMetric={onOpenCoreMetricPopover} />
-          <Metric label={<GlossaryTerm term="Q_eng" definition={GLOSSARY.q_eng.definition} />} value={qEng} metricKey="qEng" touchedMetric={touchedMetric} touchNonce={touchNonce} na={!hasElectricalConversion} onOpenMetric={onOpenCoreMetricPopover} />
           <Metric label="Fusion Power" value={fusion} unit="MW" metricKey="fusion" touchedMetric={touchedMetric} touchNonce={touchNonce} onOpenMetric={onOpenCoreMetricPopover} />
           <Metric label="Gross Electric" value={gross} unit="MW" metricKey="gross" touchedMetric={touchedMetric} touchNonce={touchNonce} na={!hasElectricalConversion} onOpenMetric={onOpenCoreMetricPopover} />
           <Metric label={<GlossaryTerm term="Recirculation" definition={GLOSSARY.recirculation.definition} />} value={recirc} unit="MW" metricKey="recirc" touchedMetric={touchedMetric} touchNonce={touchNonce} na={!hasElectricalConversion} onOpenMetric={onOpenCoreMetricPopover} />
@@ -123,6 +126,101 @@ export function ReadoutsPanel({
         }
       />
     </aside>
+  );
+}
+
+function QComparisonBlock({
+  qSci,
+  qEng,
+  hasElectricalConversion,
+  onOpenMetric,
+}: {
+  qSci: number;
+  qEng: number | null;
+  hasElectricalConversion: boolean;
+  onOpenMetric: (
+    metricId: "qSci" | "qEng" | "fusion" | "gross" | "recirc" | "net" | "lawson" | "fuel_mode",
+    anchorRect: DOMRect,
+    placement: "left" | "right" | "top",
+  ) => void;
+}) {
+  const clampedQEng = Math.max(0, Math.min(5, qEng ?? 0));
+  const qEngPercent = (clampedQEng / 5) * 100;
+  const breakEvenPercent = 20;
+  const qEngGood = (qEng ?? 0) >= 1;
+
+  return (
+    <div className="mb-2 border border-white/8 bg-white/[0.02] p-2">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="border border-white/8 p-2">
+          <div className="mb-1 inline-flex items-center gap-1">
+            <span className="text-[11px] text-white/65">Q_sci</span>
+            <button
+              type="button"
+              onClick={(event) =>
+                onOpenMetric("qSci", event.currentTarget.getBoundingClientRect(), "left")
+              }
+              className="text-white/45 transition-colors hover:text-white/80"
+              aria-label="Q_sci details"
+            >
+              <Info className="h-3 w-3" />
+            </button>
+          </div>
+          <p className="font-mono text-[20px] leading-none text-white/92">{qSci.toFixed(2)}</p>
+          <p className="mt-1 text-[10px] leading-4 text-white/58">
+            Reaction physics. &gt;1 means fusion produces more energy than the plasma absorbed.
+          </p>
+        </div>
+
+        <div className="border border-white/8 p-2">
+          <div className="mb-1 inline-flex items-center gap-1">
+            <span className="text-[11px] text-white/65">Q_eng</span>
+            <button
+              type="button"
+              onClick={(event) =>
+                onOpenMetric("qEng", event.currentTarget.getBoundingClientRect(), "left")
+              }
+              className="text-white/45 transition-colors hover:text-white/80"
+              aria-label="Q_eng details"
+            >
+              <Info className="h-3 w-3" />
+            </button>
+          </div>
+          <p className="font-mono text-[20px] leading-none text-white/92">
+            {hasElectricalConversion && qEng !== null ? qEng.toFixed(2) : "N/A"}
+          </p>
+          <p className="mt-1 text-[10px] leading-4 text-white/58">
+            Wall-plug. &gt;1 means the plant produces more electricity than it consumes.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-2 border-t border-white/8 pt-2">
+        <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-white/52">
+          Engineering break-even gauge
+        </p>
+        <div className="relative h-2 rounded-full bg-white/10">
+          <div
+            className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-white/60"
+            style={{ left: `${breakEvenPercent}%` }}
+          />
+          <div
+            className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full ${
+              qEngGood ? "bg-[#5be584]" : "bg-[#ef5757]"
+            }`}
+            style={{ left: `calc(${qEngPercent}% - 5px)` }}
+          />
+        </div>
+        <div className="mt-1 flex items-center justify-between text-[10px] text-white/48">
+          <span className="font-mono">0</span>
+          <span className="font-mono">5</span>
+        </div>
+        <p className="mt-0.5 text-[10px] text-white/62">
+          <span className="font-mono">1.0</span> break-even
+          {!hasElectricalConversion ? " — no electrical conversion in this configuration." : ""}
+        </p>
+      </div>
+    </div>
   );
 }
 

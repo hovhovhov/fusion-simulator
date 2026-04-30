@@ -69,6 +69,8 @@ export function SankeyFlowPanel({
   ) => void;
 }) {
   const simulation = useSimulation();
+  const inputs = useSimulatorStore((s) => s.inputs);
+  const activePreset = useSimulatorStore((s) => s.activePreset);
   const selectedFlowKey = useSimulatorStore((s) => s.selectedFlowKey);
   const setSelectedFlowKey = useSimulatorStore((s) => s.setSelectedFlowKey);
   const selectedNodeId = useSimulatorStore((s) => s.selectedNodeId);
@@ -133,8 +135,29 @@ export function SankeyFlowPanel({
     return null;
   }, [hoverFlow, hoverNode, resolvedLinks, selectedFlowKey, selectedNodeId]);
 
+  const narrative = useMemo(
+    () =>
+      buildSankeyNarrative({
+        activePreset,
+        heatingMW: inputs.heatingPowerMW,
+        fusionMW: simulation.power.fusionMW,
+        netMW: simulation.power.netElectricMW,
+        qEng: simulation.qEng,
+      }),
+    [activePreset, inputs.heatingPowerMW, simulation.power.fusionMW, simulation.power.netElectricMW, simulation.qEng],
+  );
+
   return (
-    <section className="panel relative h-full border-t border-white/8 p-2">
+    <section className="panel relative flex h-full min-h-0 flex-col border-t border-white/8 p-2">
+      <div className="mb-3 border border-white/8 bg-white/[0.02] px-4 py-6">
+        <p className="text-[28px] leading-[1.25] text-white/94">
+          {narrative.primaryPrefix}
+          <span className="font-mono text-[#5be584]">{narrative.accentValue}</span>
+          {narrative.primarySuffix}
+        </p>
+        <p className="mt-2 text-[13px] text-white/68">{narrative.secondary}</p>
+      </div>
+
       <div className="mb-2 flex items-center justify-between">
         <p className="section-label">Energy Flow Sankey</p>
         <button
@@ -148,7 +171,7 @@ export function SankeyFlowPanel({
         </button>
       </div>
 
-      <div className="h-[calc(100%-20px)] overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-full w-full">
           {resolvedLinks.map((link, index) => {
             const path = linkGen(link);
@@ -308,6 +331,84 @@ export function SankeyFlowPanel({
       ) : null}
     </section>
   );
+}
+
+function buildSankeyNarrative({
+  activePreset,
+  heatingMW,
+  fusionMW,
+  netMW,
+  qEng,
+}: {
+  activePreset: "jet" | "iter" | "sparc" | "arc" | "demo" | "custom";
+  heatingMW: number;
+  fusionMW: number;
+  netMW: number;
+  qEng: number | null;
+}) {
+  const heating = `${heatingMW.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`;
+  const fusion = `${fusionMW.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`;
+  const net = `${Math.abs(netMW).toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`;
+  const homes = Math.max(0, Math.round((Math.max(netMW, 0) * 1000) / 3.7)).toLocaleString();
+
+  if (activePreset === "jet") {
+    return {
+      primaryPrefix: `You inject ${heating}. Net energy is `,
+      accentValue: netMW <= 0 ? `-${net}` : `${netMW.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`,
+      primarySuffix: ".",
+      secondary:
+        "You never recovered more than you put in. Q_eng stays below engineering break-even.",
+    };
+  }
+
+  if (activePreset === "iter") {
+    return {
+      primaryPrefix: `You inject ${heating}. Fusion reaches ${fusion}, but net to grid is `,
+      accentValue:
+        netMW <= 0
+          ? `${netMW.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`
+          : `${netMW.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`,
+      primarySuffix: ".",
+      secondary:
+        "This is a physics demonstrator: strong plasma gain, but no commercial electric export in this configuration.",
+    };
+  }
+
+  if (activePreset === "sparc" || activePreset === "arc" || activePreset === "demo") {
+    if (netMW > 0) {
+      return {
+        primaryPrefix: `You inject ${heating}. You recover `,
+        accentValue: `${netMW.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`,
+        primarySuffix: " net.",
+        secondary: `That's enough to power ~${homes} homes.`,
+      };
+    }
+    return {
+      primaryPrefix: `You inject ${heating}. Net electric is `,
+      accentValue: `${netMW.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`,
+      primarySuffix: ".",
+      secondary: "This operating point is not yet grid-positive; tune gain or reduce internal load.",
+    };
+  }
+
+  if (netMW > 0) {
+    return {
+      primaryPrefix: `You inject ${heating}. You recover `,
+      accentValue: `${netMW.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`,
+      primarySuffix: " net.",
+      secondary: `Equivalent output: ~${homes} homes powered at current settings.`,
+    };
+  }
+
+  return {
+    primaryPrefix: `You inject ${heating}. Net electric is `,
+    accentValue: `${netMW.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW`,
+    primarySuffix: ".",
+    secondary:
+      qEng !== null && qEng <= 1
+        ? `Q_eng = ${qEng.toFixed(2)}. You are below engineering break-even.`
+        : "This state is not delivering positive net electricity yet.",
+  };
 }
 
 function flowColor(key: string) {

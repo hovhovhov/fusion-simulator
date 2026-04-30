@@ -1,6 +1,6 @@
 "use client";
 
-import { Environment, OrbitControls } from "@react-three/drei";
+import { Environment, Html, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Bloom, ChromaticAberration, EffectComposer, Vignette } from "@react-three/postprocessing";
 import { useMemo, useRef, useState, type RefObject } from "react";
@@ -338,7 +338,101 @@ function TokamakScene({
           depthWrite={false}
         />
       </points>
+
+      <TokamakAnnotations />
     </>
+  );
+}
+
+function TokamakAnnotations() {
+  return (
+    <>
+      <Annotation
+        anchor={[5.7, 0.2, 0.2]}
+        labelPosition={[7.8, 2.1, 1.5]}
+        title="PLASMA"
+        subtitle="~100 million C. Where fusion happens."
+      />
+      <Annotation
+        anchor={[6.9, 2.8, 1.1]}
+        labelPosition={[9.3, 3.7, 2.4]}
+        title="MAGNETIC COILS"
+        subtitle="Confine the plasma. Nothing physical can touch it."
+      />
+      <Annotation
+        anchor={[4.7, -1.1, 2.4]}
+        labelPosition={[8.4, -2.4, 3.3]}
+        title="FIRST WALL"
+        subtitle="Absorbs neutrons. Converts their energy to heat."
+      />
+    </>
+  );
+}
+
+function Annotation({
+  anchor,
+  labelPosition,
+  title,
+  subtitle,
+}: {
+  anchor: [number, number, number];
+  labelPosition: [number, number, number];
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <group>
+      <line>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[new Float32Array([...anchor, ...labelPosition]), 3]}
+          />
+        </bufferGeometry>
+        <lineBasicMaterial
+          color="#d9dde4"
+          transparent
+          opacity={0.78}
+          depthTest={false}
+        />
+      </line>
+      <mesh position={anchor}>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshBasicMaterial color="#d9dde4" transparent opacity={0.9} depthTest={false} />
+      </mesh>
+      <Html position={labelPosition} transform sprite distanceFactor={9}>
+        <div
+          style={{
+            width: "190px",
+            pointerEvents: "none",
+            color: "rgba(245,247,250,0.96)",
+            textShadow: "0 1px 2px rgba(0,0,0,0.65)",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "var(--font-geist-mono), monospace",
+              fontSize: "10px",
+              letterSpacing: "0.12em",
+              lineHeight: 1.2,
+            }}
+          >
+            {title}
+          </div>
+          <div
+            style={{
+              marginTop: "2px",
+              fontFamily: "var(--font-geist), sans-serif",
+              fontSize: "11px",
+              lineHeight: 1.35,
+              color: "rgba(204,212,224,0.84)",
+            }}
+          >
+            {subtitle}
+          </div>
+        </div>
+      </Html>
+    </group>
   );
 }
 
